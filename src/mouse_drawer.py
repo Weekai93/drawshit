@@ -14,26 +14,16 @@ from pynput import keyboard
 
 PATHS_FILE = Path("images/auto_paths.json")
 
-# Geschwindigkeit des Mauszeichnens.
-# Größer = schneller
 SPEED_PIXELS_PER_SECOND = 800
-
-# Zeit zwischen einzelnen Zeichenpfaden
 PATH_PAUSE = 0.02
-
-# Anzahl der Pfade beim sicheren Cursor-Test
 TEST_PATHS = 5
 
-# PyAutoGUI-Einstellungen
 pyautogui.PAUSE = 0.01
 pyautogui.MINIMUM_DURATION = 0.0
 
-# PyAutoGUI-Not-Aus:
-# Maus ganz oben links auf den Bildschirm bewegen -> Abbruch
+# Maus ganz oben links = zusätzlicher Not-Aus
 pyautogui.FAILSAFE = True
 
-
-# Globale Abbruch-Variable
 stop_event = threading.Event()
 
 
@@ -49,35 +39,81 @@ def load_paths():
         )
 
     with open(PATHS_FILE, "r", encoding="utf-8") as file:
-        paths = json.load(file)
+        data = json.load(file)
+
+    if "paths" not in data:
+        raise ValueError(
+            "Die JSON-Datei enthält keinen 'paths'-Eintrag."
+        )
+
+    raw_paths = data["paths"]
+
+    if not raw_paths:
+        raise ValueError(
+            "Die JSON-Datei enthält keine Zeichenpfade."
+        )
+
+    # Das vorhandene JSON-Format:
+    #
+    # {
+    #   "paths": [
+    #       [
+    #           {"x": 283, "y": 185},
+    #           {"x": 283, "y": 296}
+    #       ]
+    #   ]
+    # }
+
+    paths = []
+
+    for raw_path in raw_paths:
+        path = []
+
+        for point in raw_path:
+            if not isinstance(point, dict):
+                continue
+
+            if "x" not in point or "y" not in point:
+                continue
+
+            x = float(point["x"])
+            y = float(point["y"])
+
+            path.append((x, y))
+
+        if path:
+            paths.append(path)
 
     if not paths:
-        raise ValueError("Die JSON-Datei enthält keine Zeichenpfade.")
+        raise ValueError(
+            "Es konnten keine gültigen Punkte aus der "
+            "JSON-Datei gelesen werden."
+        )
 
     return paths
 
 
 # ============================================================
-# INFORMATIONEN ÜBER DIE BILD-KOORDINATEN
+# BILD-KOORDINATEN
 # ============================================================
 
 def get_image_bounds(paths):
     all_points = []
 
     for path in paths:
-        for point in path:
-            if len(point) >= 2:
-                x = float(point[0])
-                y = float(point[1])
-                all_points.append((x, y))
+        for x, y in path:
+            all_points.append((x, y))
 
     if not all_points:
-        raise ValueError("Keine gültigen Punkte in den Zeichenpfaden gefunden.")
+        raise ValueError(
+            "Keine gültigen Punkte in den Zeichenpfaden gefunden."
+        )
 
-    min_x = min(point[0] for point in all_points)
-    max_x = max(point[0] for point in all_points)
-    min_y = min(point[1] for point in all_points)
-    max_y = max(point[1] for point in all_points)
+    min_x = min(x for x, y in all_points)
+    max_x = max(x for x, y in all_points)
+
+    min_y = min(y for x, y in all_points)
+    max_y = max(y for x, y in all_points)
 
     return min_x, min_y, max_x, max_y
 
@@ -115,7 +151,9 @@ def select_drawing_area():
     print("4. Drücke wieder ENTER.")
     print()
 
-    input("Maus auf OBEN-LINKS bewegen und ENTER drücken...")
+    input(
+        "Maus auf OBEN-LINKS bewegen und ENTER drücken..."
+    )
 
     top_left = get_mouse_position()
 
@@ -126,7 +164,9 @@ def select_drawing_area():
 
     print()
 
-    input("Maus auf UNTEN-RECHTS bewegen und ENTER drücken...")
+    input(
+        "Maus auf UNTEN-RECHTS bewegen und ENTER drücken..."
+    )
 
     bottom_right = get_mouse_position()
 
@@ -166,11 +206,13 @@ def select_drawing_area():
 # ============================================================
 
 def create_mapper(paths, drawing_area):
-    image_min_x, image_min_y, image_max_x, image_max_y = get_image_bounds(
-        paths
+    image_min_x, image_min_y, image_max_x, image_max_y = (
+        get_image_bounds(paths)
     )
 
-    screen_left, screen_top, screen_right, screen_bottom = drawing_area
+    screen_left, screen_top, screen_right, screen_bottom = (
+        drawing_area
+    )
 
     image_width = image_max_x - image_min_x
     image_height = image_max_y - image_min_y
@@ -179,7 +221,9 @@ def create_mapper(paths, drawing_area):
     area_height = screen_bottom - screen_top
 
     if image_width <= 0 or image_height <= 0:
-        raise ValueError("Ungültige Bildabmessungen.")
+        raise ValueError(
+            "Ungültige Bildabmessungen."
+        )
 
     # Seitenverhältnis erhalten.
     scale = min(
@@ -190,33 +234,53 @@ def create_mapper(paths, drawing_area):
     scaled_width = image_width * scale
     scaled_height = image_height * scale
 
-    # Bild innerhalb des ausgewählten Rechtecks zentrieren.
-    offset_x = screen_left + (area_width - scaled_width) / 2
-    offset_y = screen_top + (area_height - scaled_height) / 2
+    # Bild im Zeichenbereich zentrieren.
+    offset_x = (
+        screen_left
+        + (area_width - scaled_width) / 2
+    )
+
+    offset_y = (
+        screen_top
+        + (area_height - scaled_height) / 2
+    )
 
     print()
     print("Bild-Koordinaten:")
     print(
-        f"  X: {image_min_x:.1f} -> {image_max_x:.1f}"
+        f"  X: {image_min_x:.1f} -> "
+        f"{image_max_x:.1f}"
     )
     print(
-        f"  Y: {image_min_y:.1f} -> {image_max_y:.1f}"
+        f"  Y: {image_min_y:.1f} -> "
+        f"{image_max_y:.1f}"
     )
 
     print()
     print("Skalierung:")
     print(f"  Faktor: {scale:.3f}")
-    print(f"  Ausgabe: {scaled_width:.0f} x {scaled_height:.0f}")
+    print(
+        f"  Ausgabe: "
+        f"{scaled_width:.0f} x "
+        f"{scaled_height:.0f}"
+    )
 
     def map_point(point):
-        image_x = float(point[0])
-        image_y = float(point[1])
+        image_x = point[0]
+        image_y = point[1]
 
         normalized_x = image_x - image_min_x
         normalized_y = image_y - image_min_y
 
-        screen_x = offset_x + normalized_x * scale
-        screen_y = offset_y + normalized_y * scale
+        screen_x = (
+            offset_x
+            + normalized_x * scale
+        )
+
+        screen_y = (
+            offset_y
+            + normalized_y * scale
+        )
 
         return round(screen_x), round(screen_y)
 
@@ -232,34 +296,48 @@ def start_escape_listener():
         if key == keyboard.Key.esc:
             print()
             print()
-            print("!!! ESC GEDRÜCKT - ZEICHNEN WIRD ABGEBROCHEN !!!")
+            print(
+                "!!! ESC GEDRÜCKT - "
+                "ZEICHNEN WIRD ABGEBROCHEN !!!"
+            )
+
             stop_event.set()
+
             return False
 
         return True
 
-    listener = keyboard.Listener(on_press=on_press)
+    listener = keyboard.Listener(
+        on_press=on_press
+    )
+
     listener.start()
 
     return listener
 
 
 # ============================================================
-# DISTANZ ZWISCHEN ZWEI PUNKTEN
+# DISTANZ
 # ============================================================
 
 def distance(point_a, point_b):
     dx = point_b[0] - point_a[0]
     dy = point_b[1] - point_a[1]
 
-    return math.sqrt(dx * dx + dy * dy)
+    return math.sqrt(
+        dx * dx + dy * dy
+    )
 
 
 # ============================================================
 # MAUS BEWEGEN
 # ============================================================
 
-def move_mouse_safely(target_x, target_y, current_position=None):
+def move_mouse_safely(
+    target_x,
+    target_y,
+    current_position=None
+):
     if stop_event.is_set():
         return False
 
@@ -288,77 +366,22 @@ def move_mouse_safely(target_x, target_y, current_position=None):
 
 
 # ============================================================
-# EINZELNEN PFAD ZEICHNEN
-# ============================================================
-
-def draw_path(path, map_point):
-    if stop_event.is_set():
-        return False
-
-    if not path:
-        return True
-
-    first_screen_point = map_point(path[0])
-
-    # Erst zum Anfangspunkt des Pfades bewegen.
-    if not move_mouse_safely(
-        first_screen_point[0],
-        first_screen_point[1]
-    ):
-        return False
-
-    if stop_event.is_set():
-        return False
-
-    # Maustaste gedrückt halten.
-    pyautogui.mouseDown()
-
-    try:
-        previous_point = first_screen_point
-
-        for point in path[1:]:
-            if stop_event.is_set():
-                return False
-
-            screen_point = map_point(point)
-
-            dist = distance(
-                previous_point,
-                screen_point
-            )
-
-            duration = max(
-                0.001,
-                dist / SPEED_PIXELS_PER_SECOND
-            )
-
-            pyautogui.moveTo(
-                screen_point[0],
-                screen_point[1],
-                duration=duration
-            )
-
-            previous_point = screen_point
-
-    finally:
-        # Maustaste IMMER loslassen.
-        pyautogui.mouseUp()
-
-    return not stop_event.is_set()
-
-
-# ============================================================
 # CURSOR-TEST
 # ============================================================
 
 def cursor_test(paths, map_point):
+    test_count = min(
+        TEST_PATHS,
+        len(paths)
+    )
+
     print()
     print("=" * 50)
     print("CURSOR-TEST")
     print("=" * 50)
     print()
     print(
-        f"Es werden die ersten {min(TEST_PATHS, len(paths))} "
+        f"Es werden die ersten {test_count} "
         "Pfade abgefahren."
     )
     print()
@@ -369,7 +392,11 @@ def cursor_test(paths, map_point):
     print("ESC = sofort abbrechen")
     print()
 
-    input("ENTER drücken, um den Cursor-Test zu starten...")
+    input(
+        "ENTER drücken, um den Cursor-Test zu starten..."
+    )
+
+    stop_event.clear()
 
     print()
     print("Start in 3...")
@@ -392,13 +419,16 @@ def cursor_test(paths, map_point):
                 break
 
             print(
-                f"Cursor-Test: Pfad {index}/{min(TEST_PATHS, len(paths))}"
+                f"Cursor-Test: "
+                f"Pfad {index}/{test_count}"
             )
 
             if not path:
                 continue
 
-            first_point = map_point(path[0])
+            first_point = map_point(
+                path[0]
+            )
 
             if not move_mouse_safely(
                 first_point[0],
@@ -410,18 +440,23 @@ def cursor_test(paths, map_point):
                 if stop_event.is_set():
                     break
 
-                screen_point = map_point(point)
+                screen_point = map_point(
+                    point
+                )
 
-                move_mouse_safely(
+                if not move_mouse_safely(
                     screen_point[0],
                     screen_point[1]
-                )
+                ):
+                    break
 
             time.sleep(PATH_PAUSE)
 
     except pyautogui.FailSafeException:
         print()
-        print("PyAutoGUI FAILSAFE ausgelöst.")
+        print(
+            "PyAutoGUI FAILSAFE ausgelöst."
+        )
 
     finally:
         stop_event.set()
@@ -434,9 +469,77 @@ def cursor_test(paths, map_point):
     print()
 
     if stop_event.is_set():
-        print("Cursor-Test beendet/abgebrochen.")
+        print(
+            "Cursor-Test beendet/abgebrochen."
+        )
     else:
-        print("Cursor-Test abgeschlossen.")
+        print(
+            "Cursor-Test abgeschlossen."
+        )
+
+
+# ============================================================
+# ECHTES ZEICHNEN
+# ============================================================
+
+def draw_path(path, map_point):
+    if stop_event.is_set():
+        return False
+
+    if not path:
+        return True
+
+    first_screen_point = map_point(
+        path[0]
+    )
+
+    # Zum Anfang des Pfades bewegen.
+    if not move_mouse_safely(
+        first_screen_point[0],
+        first_screen_point[1]
+    ):
+        return False
+
+    if stop_event.is_set():
+        return False
+
+    # Maustaste drücken.
+    pyautogui.mouseDown()
+
+    try:
+        previous_point = first_screen_point
+
+        for point in path[1:]:
+            if stop_event.is_set():
+                return False
+
+            screen_point = map_point(
+                point
+            )
+
+            dist = distance(
+                previous_point,
+                screen_point
+            )
+
+            duration = max(
+                0.001,
+                dist / SPEED_PIXELS_PER_SECOND
+            )
+
+            pyautogui.moveTo(
+                screen_point[0],
+                screen_point[1],
+                duration=duration
+            )
+
+            previous_point = screen_point
+
+    finally:
+        # Sicherheitshalber immer loslassen.
+        pyautogui.mouseUp()
+
+    return not stop_event.is_set()
 
 
 # ============================================================
@@ -450,22 +553,31 @@ def draw_image(paths, map_point):
     print("=" * 50)
     print()
     print(f"Zeichenpfade: {len(paths)}")
-    print(f"Geschwindigkeit: {SPEED_PIXELS_PER_SECOND} Pixel/Sekunde")
+    print(
+        f"Geschwindigkeit: "
+        f"{SPEED_PIXELS_PER_SECOND} "
+        "Pixel/Sekunde"
+    )
     print()
     print("!!! NOT-AUS !!!")
     print("ESC drücken -> sofort abbrechen")
-    print("Maus ganz oben links -> PyAutoGUI-Not-Aus")
+    print(
+        "Maus ganz oben links -> "
+        "zusätzlicher Not-Aus"
+    )
     print()
 
     input(
-        "ENTER drücken, um das echte Zeichnen zu starten..."
+        "ENTER drücken, um das echte "
+        "Zeichnen zu starten..."
     )
 
     stop_event.clear()
 
     print()
-    print("ACHTUNG: Zeichnen startet in 5 Sekunden.")
-    print("Du kannst jetzt noch abbrechen.")
+    print(
+        "ACHTUNG: Zeichnen startet in 5 Sekunden."
+    )
     print()
 
     for countdown in range(5, 0, -1):
@@ -480,12 +592,16 @@ def draw_image(paths, map_point):
     completed_paths = 0
 
     try:
-        for index, path in enumerate(paths, start=1):
+        for index, path in enumerate(
+            paths,
+            start=1
+        ):
             if stop_event.is_set():
                 break
 
             print(
-                f"Zeichne Pfad {index}/{len(paths)}",
+                f"Zeichne Pfad "
+                f"{index}/{len(paths)}",
                 end="\r",
                 flush=True
             )
@@ -505,15 +621,18 @@ def draw_image(paths, map_point):
     except pyautogui.FailSafeException:
         print()
         print()
-        print("PyAutoGUI FAILSAFE ausgelöst.")
+        print(
+            "PyAutoGUI FAILSAFE ausgelöst."
+        )
 
     except KeyboardInterrupt:
         print()
         print()
-        print("Mit STRG+C abgebrochen.")
+        print(
+            "Mit STRG+C abgebrochen."
+        )
 
     finally:
-        # Sicherheitshalber Maustaste loslassen.
         try:
             pyautogui.mouseUp()
         except Exception:
@@ -530,13 +649,13 @@ def draw_image(paths, map_point):
     print()
 
     if completed_paths == len(paths):
-        print("================================")
+        print("=" * 50)
         print("ZEICHNEN ABGESCHLOSSEN")
-        print("================================")
+        print("=" * 50)
     else:
-        print("================================")
+        print("=" * 50)
         print("ZEICHNEN ABGEBROCHEN")
-        print("================================")
+        print("=" * 50)
 
     print(
         f"Abgeschlossene Pfade: "
@@ -560,7 +679,9 @@ def main():
         # Pfade laden
         # ----------------------------------------------------
 
-        print("Zeichenpfade werden geladen...")
+        print(
+            "Zeichenpfade werden geladen..."
+        )
 
         paths = load_paths()
 
@@ -569,17 +690,24 @@ def main():
             for path in paths
         )
 
-        print(f"{len(paths)} Zeichenpfade geladen.")
-        print(f"{point_count} Zeichenpunkte geladen.")
+        print(
+            f"{len(paths)} "
+            "Zeichenpfade geladen."
+        )
+
+        print(
+            f"{point_count} "
+            "Zeichenpunkte geladen."
+        )
 
         # ----------------------------------------------------
-        # Zeichenbereich auswählen
+        # Zeichenbereich
         # ----------------------------------------------------
 
         drawing_area = select_drawing_area()
 
         # ----------------------------------------------------
-        # Mapper erstellen
+        # Mapper
         # ----------------------------------------------------
 
         map_point = create_mapper(
@@ -601,10 +729,11 @@ def main():
         print("3 = Beenden")
         print()
 
-        choice = input("Auswahl: ").strip()
+        choice = input(
+            "Auswahl: "
+        ).strip()
 
         if choice == "1":
-            # Cursor-Test
             stop_event.clear()
 
             cursor_test(
@@ -613,20 +742,31 @@ def main():
             )
 
         elif choice == "2":
-            # Sicherheitsabfrage
             print()
             print("!!! WARNUNG !!!")
             print()
-            print("Jetzt wird die Maustaste tatsächlich")
-            print("gedrückt und das Bild gezeichnet.")
+            print(
+                "Jetzt wird die Maustaste tatsächlich "
+                "gedrückt und das Bild gezeichnet."
+            )
             print()
             print("Stelle sicher, dass:")
-            print("- das richtige Zeichenprogramm geöffnet ist")
-            print("- die Zeichenfläche ausgewählt wurde")
-            print("- die ausgewählte Fläche korrekt ist")
+            print(
+                "- das richtige Zeichenprogramm "
+                "geöffnet ist"
+            )
+            print(
+                "- die Zeichenfläche ausgewählt wurde"
+            )
+            print(
+                "- die ausgewählte Fläche korrekt ist"
+            )
             print()
             print("ESC = sofortiger Abbruch")
-            print("Maus oben links = zusätzlicher Not-Aus")
+            print(
+                "Maus oben links = "
+                "zusätzlicher Not-Aus"
+            )
             print()
 
             confirmation = input(

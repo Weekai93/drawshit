@@ -1,138 +1,108 @@
-import json
-from pathlib import Path
+import time
 
-import cv2
-import numpy as np
+import pyautogui
 
 
-def load_paths(path: str):
-    """Lädt die gespeicherten Zeichenpfade."""
+# ---------------------------------------------------------
+# Einstellungen
+# ---------------------------------------------------------
 
-    file_path = Path(path)
-
-    if not file_path.exists():
-        raise FileNotFoundError(
-            f"Pfaddatei nicht gefunden: {path}"
-        )
-
-    with open(file_path, "r", encoding="utf-8") as file:
-        data = json.load(file)
-
-    return data["paths"]
+TEST_DISTANCE = 100
+TEST_DURATION = 1.0
 
 
-def calculate_bounds(paths):
-    """Berechnet die Grenzen aller Zeichenpunkte."""
+# ---------------------------------------------------------
+# Mausfunktionen
+# ---------------------------------------------------------
 
-    all_points = [
-        point
-        for path in paths
-        for point in path
-    ]
+def get_mouse_position():
+    """Gibt die aktuelle Mausposition zurück."""
 
-    if not all_points:
-        raise ValueError("Keine Zeichenpunkte vorhanden.")
+    x, y = pyautogui.position()
 
-    min_x = min(point["x"] for point in all_points)
-    max_x = max(point["x"] for point in all_points)
-    min_y = min(point["y"] for point in all_points)
-    max_y = max(point["y"] for point in all_points)
-
-    return min_x, max_x, min_y, max_y
+    return x, y
 
 
-def create_simulation(
-    paths,
-    output_path: str,
-    padding: int = 20,
-):
+def print_mouse_position():
+    """Zeigt die aktuelle Mausposition an."""
+
+    x, y = get_mouse_position()
+
+    print(f"Mausposition: X={x}, Y={y}")
+
+
+def test_mouse_movement():
     """
-    Zeichnet die gespeicherten Mauspfade auf
-    eine weiße Fläche.
+    Bewegt die Maus kontrolliert ein kleines Stück
+    nach rechts und anschließend wieder zurück.
     """
 
-    min_x, max_x, min_y, max_y = calculate_bounds(paths)
+    print()
+    print("Mausbewegung wird vorbereitet.")
+    print("Die Maus bewegt sich gleich 100 Pixel nach rechts.")
+    print("")
 
-    width = (max_x - min_x) + padding * 2
-    height = (max_y - min_y) + padding * 2
+    # Kurze Sicherheitsverzögerung
+    for seconds in range(3, 0, -1):
+        print(f"Start in {seconds}...")
+        time.sleep(1)
 
-    # Mindestgröße
-    width = max(width, 100)
-    height = max(height, 100)
+    start_x, start_y = get_mouse_position()
 
-    canvas = np.ones(
-        (height, width, 3),
-        dtype=np.uint8,
-    ) * 255
-
-    for path in paths:
-        if len(path) < 2:
-            continue
-
-        points = []
-
-        for point in path:
-            x = point["x"] - min_x + padding
-            y = point["y"] - min_y + padding
-
-            points.append([x, y])
-
-        points = np.array(
-            points,
-            dtype=np.int32,
-        )
-
-        cv2.polylines(
-            canvas,
-            [points],
-            isClosed=False,
-            color=(0, 0, 0),
-            thickness=2,
-        )
-
-    success = cv2.imwrite(
-        output_path,
-        canvas,
+    print(
+        f"Startposition: X={start_x}, Y={start_y}"
     )
 
-    if not success:
-        raise IOError(
-            f"Simulation konnte nicht gespeichert werden: "
-            f"{output_path}"
-        )
+    target_x = start_x + TEST_DISTANCE
 
+    print(
+        f"Zielposition: X={target_x}, Y={start_y}"
+    )
+
+    # Langsame, kontrollierte Bewegung
+    pyautogui.moveTo(
+        target_x,
+        start_y,
+        duration=TEST_DURATION,
+    )
+
+    print("Hinbewegung abgeschlossen.")
+
+    time.sleep(0.5)
+
+    # Wieder zurück
+    pyautogui.moveTo(
+        start_x,
+        start_y,
+        duration=TEST_DURATION,
+    )
+
+    print("Rückbewegung abgeschlossen.")
+
+    print()
+    print("Maus-Test abgeschlossen.")
+
+
+# ---------------------------------------------------------
+# Hauptprogramm
+# ---------------------------------------------------------
 
 def main():
-    paths_file = "images/auto_paths.json"
-    output_file = "images/auto_simulation.png"
+    print("================================")
+    print("       MOUSE DRAWING APP")
+    print("================================")
+    print()
 
-    print("Zeichenpfade werden geladen...")
+    print("Aktuelle Mausposition:")
+    print_mouse_position()
 
-    paths = load_paths(paths_file)
+    print()
+    print("Hinweis:")
+    print("Dieser Test bewegt die Maus nur 100 Pixel")
+    print("nach rechts und anschließend zurück.")
+    print()
 
-    print(
-        f"{len(paths)} Zeichenpfade geladen."
-    )
-
-    total_points = sum(
-        len(path)
-        for path in paths
-    )
-
-    print(
-        f"{total_points} Zeichenpunkte geladen."
-    )
-
-    print("Simulation wird erstellt...")
-
-    create_simulation(
-        paths,
-        output_file,
-    )
-
-    print(
-        f"Simulation gespeichert: {output_file}"
-    )
+    test_mouse_movement()
 
 
 if __name__ == "__main__":

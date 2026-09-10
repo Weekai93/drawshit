@@ -1,7 +1,9 @@
+```python
 import json
 import math
 import threading
 import time
+import traceback
 from pathlib import Path
 
 import pyautogui
@@ -14,16 +16,26 @@ from pynput import keyboard
 
 PATHS_FILE = Path("images/auto_paths.json")
 
+# Höher = schneller
 SPEED_PIXELS_PER_SECOND = 800
+
+# Mindestdauer einer Mausbewegung
+MIN_MOVE_DURATION = 0.01
+
+# Pause zwischen einzelnen Zeichenpfaden
 PATH_PAUSE = 0.02
+
+# Anzahl der Pfade beim Cursor-Test
 TEST_PATHS = 5
 
+# PyAutoGUI
 pyautogui.PAUSE = 0.01
-pyautogui.MINIMUM_DURATION = 0.0
+pyautogui.MINIMUM_DURATION = 0.01
 
 # Maus ganz oben links = zusätzlicher Not-Aus
 pyautogui.FAILSAFE = True
 
+# Globales Stop-Signal
 stop_event = threading.Event()
 
 
@@ -53,17 +65,6 @@ def load_paths():
             "Die JSON-Datei enthält keine Zeichenpfade."
         )
 
-    # Das vorhandene JSON-Format:
-    #
-    # {
-    #   "paths": [
-    #       [
-    #           {"x": 283, "y": 185},
-    #           {"x": 283, "y": 296}
-    #       ]
-    #   ]
-    # }
-
     paths = []
 
     for raw_path in raw_paths:
@@ -76,8 +77,11 @@ def load_paths():
             if "x" not in point or "y" not in point:
                 continue
 
-            x = float(point["x"])
-            y = float(point["y"])
+            try:
+                x = float(point["x"])
+                y = float(point["y"])
+            except (TypeError, ValueError):
+                continue
 
             path.append((x, y))
 
@@ -127,11 +131,6 @@ def get_mouse_position():
     return position.x, position.y
 
 
-def print_mouse_position():
-    x, y = get_mouse_position()
-    print(f"Mausposition: X={x}, Y={y}")
-
-
 # ============================================================
 # ZEICHENBEREICH AUSWÄHLEN
 # ============================================================
@@ -145,10 +144,10 @@ def select_drawing_area():
     print("Du wählst jetzt das Rechteck aus,")
     print("in das das Bild gezeichnet werden soll.")
     print()
-    print("1. Bewege die Maus auf die OBERE LINKE Ecke.")
-    print("2. Drücke ENTER im Terminal.")
-    print("3. Bewege die Maus auf die UNTERE RECHTE Ecke.")
-    print("4. Drücke wieder ENTER.")
+    print("1. Maus auf die OBERE LINKE Ecke bewegen.")
+    print("2. ENTER im Terminal drücken.")
+    print("3. Maus auf die UNTERE RECHTE Ecke bewegen.")
+    print("4. ENTER im Terminal drücken.")
     print()
 
     input(
@@ -220,21 +219,41 @@ def create_mapper(paths, drawing_area):
     area_width = screen_right - screen_left
     area_height = screen_bottom - screen_top
 
-    if image_width <= 0 or image_height <= 0:
+    if image_width <= 0:
         raise ValueError(
-            "Ungültige Bildabmessungen."
+            f"Ungültige Bildbreite: {image_width}"
         )
 
-    # Seitenverhältnis erhalten.
+    if image_height <= 0:
+        raise ValueError(
+            f"Ungültige Bildhöhe: {image_height}"
+        )
+
+    if area_width <= 0:
+        raise ValueError(
+            f"Ungültige Zeichenflächenbreite: {area_width}"
+        )
+
+    if area_height <= 0:
+        raise ValueError(
+            f"Ungültige Zeichenflächenhöhe: {area_height}"
+        )
+
+    # Seitenverhältnis beibehalten
     scale = min(
         area_width / image_width,
         area_height / image_height
     )
 
+    if scale <= 0:
+        raise ValueError(
+            f"Ungültiger Skalierungsfaktor: {scale}"
+        )
+
     scaled_width = image_width * scale
     scaled_height = image_height * scale
 
-    # Bild im Zeichenbereich zentrieren.
+    # Bild zentrieren
     offset_x = (
         screen_left
         + (area_width - scaled_width) / 2
@@ -324,13 +343,11 @@ def distance(point_a, point_b):
     dx = point_b[0] - point_a[0]
     dy = point_b[1] - point_a[1]
 
-    return math.sqrt(
-        dx * dx + dy * dy
-    )
+    return math.hypot(dx, dy)
 
 
 # ============================================================
-# MAUS BEWEGEN
+# SICHERE MAUSBEWEGUNG
 # ============================================================
 
 def move_mouse_safely(
@@ -351,9 +368,19 @@ def move_mouse_safely(
         (target_x, target_y)
     )
 
+    # WICHTIG:
+    # Keine Division durch 0 und keine zu kurze Dauer.
+    if SPEED_PIXELS_PER_SECOND <= 0:
+        raise ValueError(
+            "SPEED_PIXELS_PER_SECOND muss größer als 0 sein."
+        )
+
+    if dist <= 0:
+        return True
+
     duration = max(
-        0.001,
-        dist / SPEED_PIXELS_PER_SECOND
+        MIN_MOVE_DURATION,
+        dist / float(SPEED_PIXELS_PER_SECOND)
     )
 
     pyautogui.moveTo(
@@ -362,7 +389,7 @@ def move_mouse_safely(
         duration=duration
     )
 
-    return True
+    return not stop_event.is_set()
 
 
 # ============================================================
@@ -385,7 +412,6 @@ def cursor_test(paths, map_point):
         "Pfade abgefahren."
     )
     print()
-    print("WICHTIG:")
     print("Die Maustaste wird NICHT gedrückt.")
     print("Es wird also noch NICHT gezeichnet.")
     print()
@@ -412,7 +438,7 @@ def cursor_test(paths, map_point):
 
     try:
         for index, path in enumerate(
-            paths[:TEST_PATHS],
+            paths[:test_count],
             start=1
         ):
             if stop_event.is_set():
@@ -426,9 +452,7 @@ def cursor_test(paths, map_point):
             if not path:
                 continue
 
-            first_point = map_point(
-                path[0]
-            )
+            first_point = map_point(path[0])
 
             if not move_mouse_safely(
                 first_point[0],
@@ -436,27 +460,28 @@ def cursor_test(paths, map_point):
             ):
                 break
 
+            previous_point = first_point
+
             for point in path[1:]:
                 if stop_event.is_set():
                     break
 
-                screen_point = map_point(
-                    point
-                )
+                screen_point = map_point(point)
 
                 if not move_mouse_safely(
                     screen_point[0],
-                    screen_point[1]
+                    screen_point[1],
+                    previous_point
                 ):
                     break
+
+                previous_point = screen_point
 
             time.sleep(PATH_PAUSE)
 
     except pyautogui.FailSafeException:
         print()
-        print(
-            "PyAutoGUI FAILSAFE ausgelöst."
-        )
+        print("PyAutoGUI FAILSAFE ausgelöst.")
 
     finally:
         stop_event.set()
@@ -469,17 +494,13 @@ def cursor_test(paths, map_point):
     print()
 
     if stop_event.is_set():
-        print(
-            "Cursor-Test beendet/abgebrochen."
-        )
+        print("Cursor-Test beendet/abgebrochen.")
     else:
-        print(
-            "Cursor-Test abgeschlossen."
-        )
+        print("Cursor-Test abgeschlossen.")
 
 
 # ============================================================
-# ECHTES ZEICHNEN
+# EINEN PFAD ZEICHNEN
 # ============================================================
 
 def draw_path(path, map_point):
@@ -493,7 +514,6 @@ def draw_path(path, map_point):
         path[0]
     )
 
-    # Zum Anfang des Pfades bewegen.
     if not move_mouse_safely(
         first_screen_point[0],
         first_screen_point[1]
@@ -503,7 +523,6 @@ def draw_path(path, map_point):
     if stop_event.is_set():
         return False
 
-    # Maustaste drücken.
     pyautogui.mouseDown()
 
     try:
@@ -513,18 +532,20 @@ def draw_path(path, map_point):
             if stop_event.is_set():
                 return False
 
-            screen_point = map_point(
-                point
-            )
+            screen_point = map_point(point)
 
             dist = distance(
                 previous_point,
                 screen_point
             )
 
+            if dist <= 0:
+                previous_point = screen_point
+                continue
+
             duration = max(
-                0.001,
-                dist / SPEED_PIXELS_PER_SECOND
+                MIN_MOVE_DURATION,
+                dist / float(SPEED_PIXELS_PER_SECOND)
             )
 
             pyautogui.moveTo(
@@ -536,7 +557,7 @@ def draw_path(path, map_point):
             previous_point = screen_point
 
     finally:
-        # Sicherheitshalber immer loslassen.
+        # Maustaste IMMER loslassen.
         pyautogui.mouseUp()
 
     return not stop_event.is_set()
@@ -675,13 +696,7 @@ def main():
     print()
 
     try:
-        # ----------------------------------------------------
-        # Pfade laden
-        # ----------------------------------------------------
-
-        print(
-            "Zeichenpfade werden geladen..."
-        )
+        print("Zeichenpfade werden geladen...")
 
         paths = load_paths()
 
@@ -700,24 +715,12 @@ def main():
             "Zeichenpunkte geladen."
         )
 
-        # ----------------------------------------------------
-        # Zeichenbereich
-        # ----------------------------------------------------
-
         drawing_area = select_drawing_area()
-
-        # ----------------------------------------------------
-        # Mapper
-        # ----------------------------------------------------
 
         map_point = create_mapper(
             paths,
             drawing_area
         )
-
-        # ----------------------------------------------------
-        # Menü
-        # ----------------------------------------------------
 
         print()
         print("=" * 50)
@@ -803,6 +806,9 @@ def main():
         print("=" * 50)
         print()
         print(error)
+        print()
+        print("Details:")
+        traceback.print_exc()
 
     print()
 
@@ -813,3 +819,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+```

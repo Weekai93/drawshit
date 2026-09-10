@@ -16,7 +16,7 @@ from pynput import keyboard
 PATHS_FILE = Path("images/auto_paths.json")
 
 # Höher = schneller
-SPEED_PIXELS_PER_SECOND = 800
+SPEED_PIXELS_PER_SECOND = 5000
 
 # Mindestdauer einer Mausbewegung
 MIN_MOVE_DURATION = 0.01

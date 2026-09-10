@@ -503,63 +503,99 @@ def cursor_test(paths, map_point):
 # ============================================================
 
 def draw_path(path, map_point):
-    if stop_event.is_set():
-        return False
+    """
+    Zeichnet einen einzelnen Pfad auf dem Bildschirm.
+
+    Identische aufeinanderfolgende Punkte werden übersprungen,
+    damit PyAutoGUI niemals eine Bewegung mit 0 Pixeln ausführen muss.
+    """
 
     if not path:
-        return True
+        return False
 
-    first_screen_point = map_point(
-        path[0]
-    )
+    mapped_points = []
 
-    if not move_mouse_safely(
-        first_screen_point[0],
-        first_screen_point[1]
+    # Alle Bildpunkte auf Bildschirmkoordinaten abbilden
+    for point in path:
+        try:
+            screen_point = map_point(point)
+
+            if screen_point is None:
+                continue
+
+            x = int(round(screen_point[0]))
+            y = int(round(screen_point[1]))
+
+            mapped_points.append((x, y))
+
+        except Exception:
+            continue
+
+    if not mapped_points:
+        return False
+
+    # Doppelte aufeinanderfolgende Punkte entfernen
+    clean_points = [mapped_points[0]]
+
+    for point in mapped_points[1:]:
+        if point != clean_points[-1]:
+            clean_points.append(point)
+
+    if not clean_points:
+        return False
+
+    # Zum ersten Punkt bewegen
+    first_point = clean_points[0]
+
+    current_position = pyautogui.position()
+
+    if (
+        current_position.x != first_point[0]
+        or current_position.y != first_point[1]
     ):
-        return False
+        pyautogui.moveTo(
+            first_point[0],
+            first_point[1],
+            duration=max(MIN_MOVE_DURATION, 0.05)
+        )
 
-    if stop_event.is_set():
-        return False
-
+    # Zeichnen
     pyautogui.mouseDown()
 
     try:
-        previous_point = first_screen_point
+        for point in clean_points[1:]:
 
-        for point in path[1:]:
+            # Sicherheitsabbruch
             if stop_event.is_set():
                 return False
 
-            screen_point = map_point(point)
+            current = pyautogui.position()
 
-            dist = distance(
-                previous_point,
-                screen_point
-            )
+            dx = point[0] - current.x
+            dy = point[1] - current.y
 
-            if dist <= 0:
-                previous_point = screen_point
+            distance = math.hypot(dx, dy)
+
+            # WICHTIG:
+            # Keine Bewegung ausführen, wenn wir bereits dort sind.
+            if distance <= 0:
                 continue
 
-            duration = max(
-                MIN_MOVE_DURATION,
-                dist / float(SPEED_PIXELS_PER_SECOND)
-            )
+            duration = distance / SPEED_PIXELS_PER_SECOND
+
+            # PyAutoGUI niemals eine extrem kleine/0 Dauer geben
+            duration = max(duration, MIN_MOVE_DURATION, 0.05)
 
             pyautogui.moveTo(
-                screen_point[0],
-                screen_point[1],
+                point[0],
+                point[1],
                 duration=duration
             )
 
-            previous_point = screen_point
-
     finally:
-        # Maustaste IMMER loslassen.
         pyautogui.mouseUp()
 
-    return not stop_event.is_set()
+    return True
 
 
 # ============================================================

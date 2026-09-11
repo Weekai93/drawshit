@@ -768,8 +768,16 @@ def main():
             "(ohne Angabe öffnet sich ein Dateiauswahldialog)"
         ),
     )
+    parser.add_argument(
+        "--clipboard",
+        action="store_true",
+        help="Verwendet das Bild aus der Zwischenablage",
+    )
 
     args = parser.parse_args()
+
+    if args.clipboard and args.input_file:
+        parser.error("Dateipfad und --clipboard können nicht kombiniert werden.")
 
     print()
     print("=" * 50)
@@ -778,12 +786,16 @@ def main():
     print()
 
     try:
-        if args.input_file:
+        if args.clipboard:
+            from image_processor import save_clipboard_image
+
+            input_path = save_clipboard_image()
+        elif args.input_file:
             input_path = Path(args.input_file)
         else:
-            from image_processor import select_image_file
+            from image_processor import select_image_source
 
-            input_path = select_image_file()
+            input_path = select_image_source()
 
             if input_path is None:
                 print(

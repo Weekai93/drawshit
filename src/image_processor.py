@@ -2,10 +2,11 @@ import argparse
 import json
 from pathlib import Path
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 
 import cv2
 import numpy as np
+from PIL import ImageGrab
 
 
 EDGE_BLUR_KERNEL = (3, 3)
@@ -13,6 +14,7 @@ EDGE_LOW_THRESHOLD = 30
 EDGE_HIGH_THRESHOLD = 100
 MIN_CONTOUR_PERIMETER = 10
 CONTOUR_EPSILON_FACTOR = 0.0005
+CLIPBOARD_IMAGE_PATH = Path("images/clipboard.png")
 
 
 def load_image(image_path: str) -> np.ndarray:
@@ -253,6 +255,53 @@ def select_image_file() -> Path | None:
     return Path(selected_file) if selected_file else None
 
 
+def select_image_source() -> Path | None:
+    """Lässt zwischen Zwischenablage und Dateiauswahl wählen."""
+    root = tk.Tk()
+    root.withdraw()
+
+    try:
+        use_clipboard = messagebox.askyesnocancel(
+            title="Bildquelle auswählen",
+            message=(
+                "Soll das Bild aus der Zwischenablage verwendet werden?\n\n"
+                "Ja = Zwischenablage\n"
+                "Nein = Bild aus dem Explorer auswählen\n"
+                "Abbrechen = Programm beenden"
+            ),
+            default="yes",
+        )
+
+        if use_clipboard is True:
+            return save_clipboard_image()
+
+        if use_clipboard is False:
+            return select_image_file()
+
+        return None
+    finally:
+        root.destroy()
+
+
+def save_clipboard_image(output_path=CLIPBOARD_IMAGE_PATH) -> Path:
+    """Speichert ein Bild aus der Windows-Zwischenablage als PNG."""
+    clipboard_image = ImageGrab.grabclipboard()
+
+    if clipboard_image is None or not hasattr(clipboard_image, "save"):
+        raise ValueError(
+            "Die Zwischenablage enthält kein Bild. "
+            "Bitte zuerst ein Bild, zum Beispiel mit dem Snipping Tool, "
+            "kopieren."
+        )
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    clipboard_image.convert("RGB").save(output_path, format="PNG")
+
+    print(f"Bild aus der Zwischenablage gespeichert: {output_path}")
+    return output_path
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Verarbeitet ein Bild in Zeichenpfade."
@@ -261,16 +310,24 @@ def main():
         "image_path",
         nargs="?",
         help=(
-            "Pfad zum Eingabebild; ohne Angabe öffnet sich "
-            "ein Dateiauswahldialog"
+            "Pfad zum Eingabebild; ohne Angabe wird die "
+            "Zwischenablage verwendet"
         ),
+    )
+    parser.add_argument(
+        "--clipboard",
+        action="store_true",
+        help="Verwendet das Bild aus der Zwischenablage",
     )
 
     args = parser.parse_args()
+    if args.clipboard and args.image_path:
+        parser.error("Bildpfad und --clipboard können nicht kombiniert werden.")
+
     image_path = (
-        Path(args.image_path)
-        if args.image_path
-        else select_image_file()
+        save_clipboard_image()
+        if args.clipboard or not args.image_path
+        else Path(args.image_path)
     )
 
     if image_path is None:

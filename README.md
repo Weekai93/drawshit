@@ -15,13 +15,32 @@ gezeichnet:
 python src/mouse_drawer.py
 ```
 
-Du kannst das Bild auch über den Explorer auswählen:
+Ein kopiertes Bild, zum Beispiel aus dem Snipping Tool, kann direkt aus der
+Windows-Zwischenablage verarbeitet und gezeichnet werden:
+
+```powershell
+python src/mouse_drawer.py --clipboard
+```
+
+Mit der gebauten Windows-EXE:
+
+```powershell
+dist\DrawShit.exe --clipboard
+```
+
+Nur die Bildverarbeitung mit der Zwischenablage wird ohne Flag gestartet:
 
 ```powershell
 python src/image_processor.py
 ```
 
-Ohne Pfad öffnet sich ein Dateiauswahldialog.
+Das Bild wird dabei als `images/clipboard.png` gespeichert.
+
+Ein Bild kann auch weiterhin explizit über einen Pfad verarbeitet werden:
+
+```powershell
+python src/image_processor.py images/mein_bild.png
+```
 
 Dabei werden neben dem Eingabebild automatisch `images/mein_bild_preview.png`
 und `images/mein_bild_paths.json` erzeugt.

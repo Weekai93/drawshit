@@ -1,3 +1,4 @@
+import argparse
 import json
 import math
 import threading
@@ -43,14 +44,14 @@ stop_event = threading.Event()
 # ZEICHENPFADE LADEN
 # ============================================================
 
-def load_paths():
-    if not PATHS_FILE.exists():
+def load_paths(paths_file=PATHS_FILE):
+    if not paths_file.exists():
         raise FileNotFoundError(
-            f"Datei nicht gefunden: {PATHS_FILE}\n"
+            f"Datei nicht gefunden: {paths_file}\n"
             "Bitte zuerst image_processor.py ausführen."
         )
 
-    with open(PATHS_FILE, "r", encoding="utf-8") as file:
+    with open(paths_file, "r", encoding="utf-8") as file:
         data = json.load(file)
 
     if "paths" not in data:
@@ -131,6 +132,28 @@ def get_mouse_position():
     return position.x, position.y
 
 
+def wait_for_enter(message):
+    """Wartet global auf ENTER, auch wenn das Terminal nicht aktiv ist."""
+    print(message, flush=True)
+
+    enter_event = threading.Event()
+
+    def on_press(key):
+        if key == keyboard.Key.enter:
+            enter_event.set()
+            return False
+
+        return True
+
+    listener = keyboard.Listener(on_press=on_press)
+    listener.start()
+
+    try:
+        enter_event.wait()
+    finally:
+        listener.stop()
+
+
 # ============================================================
 # ZEICHENBEREICH AUSWÄHLEN
 # ============================================================
@@ -150,7 +173,7 @@ def select_drawing_area():
     print("4. ENTER im Terminal drücken.")
     print()
 
-    input(
+    wait_for_enter(
         "Maus auf OBEN-LINKS bewegen und ENTER drücken..."
     )
 
@@ -163,7 +186,7 @@ def select_drawing_area():
 
     print()
 
-    input(
+    wait_for_enter(
         "Maus auf UNTEN-RECHTS bewegen und ENTER drücken..."
     )
 
@@ -418,7 +441,7 @@ def cursor_test(paths, map_point):
     print("ESC = sofort abbrechen")
     print()
 
-    input(
+    wait_for_enter(
         "ENTER drücken, um den Cursor-Test zu starten..."
     )
 
@@ -548,6 +571,9 @@ def draw_path(path, map_point):
     # Zum ersten Punkt bewegen
     first_point = clean_points[0]
 
+    # Beim Wechsel zwischen Konturen niemals mit gedrückter Maustaste fahren.
+    pyautogui.mouseUp()
+
     current_position = pyautogui.position()
 
     if (
@@ -623,7 +649,7 @@ def draw_image(paths, map_point):
     )
     print()
 
-    input(
+    wait_for_enter(
         "ENTER drücken, um das echte "
         "Zeichnen zu starten..."
     )
@@ -631,17 +657,7 @@ def draw_image(paths, map_point):
     stop_event.clear()
 
     print()
-    print(
-        "ACHTUNG: Zeichnen startet in 5 Sekunden."
-    )
-    print()
-
-    for countdown in range(5, 0, -1):
-        if stop_event.is_set():
-            return
-
-        print(f"{countdown}...")
-        time.sleep(1)
+    print("Zeichnen startet jetzt.")
 
     listener = start_escape_listener()
 
@@ -724,6 +740,23 @@ def draw_image(paths, map_point):
 # ============================================================
 
 def main():
+    parser = argparse.ArgumentParser(
+        description=(
+            "Verarbeitet ein Bild oder lädt eine JSON-Datei "
+            "und zeichnet sie mit der Maus."
+        )
+    )
+    parser.add_argument(
+        "input_file",
+        nargs="?",
+        help=(
+            "Bilddatei oder JSON-Datei mit Zeichenpfaden "
+            "(ohne Angabe öffnet sich ein Dateiauswahldialog)"
+        ),
+    )
+
+    args = parser.parse_args()
+
     print()
     print("=" * 50)
     print("       MOUSE DRAWING APP")
@@ -731,9 +764,38 @@ def main():
     print()
 
     try:
+        if args.input_file:
+            input_path = Path(args.input_file)
+        else:
+            from image_processor import select_image_file
+
+            input_path = select_image_file()
+
+            if input_path is None:
+                print("Keine Datei ausgewählt.")
+                return
+
+        if input_path.suffix.lower() == ".json":
+            paths_file = input_path
+        else:
+            from image_processor import process_image
+
+            paths_file = input_path.with_name(
+                f"{input_path.stem}_paths.json"
+            )
+            preview_path = input_path.with_name(
+                f"{input_path.stem}_preview.png"
+            )
+
+            process_image(
+                str(input_path),
+                str(preview_path),
+                str(paths_file),
+            )
+
         print("Zeichenpfade werden geladen...")
 
-        paths = load_paths()
+        paths = load_paths(paths_file)
 
         point_count = sum(
             len(path)

@@ -1,8 +1,18 @@
-from pathlib import Path
+import argparse
 import json
+from pathlib import Path
+import tkinter as tk
+from tkinter import filedialog
 
 import cv2
 import numpy as np
+
+
+EDGE_BLUR_KERNEL = (3, 3)
+EDGE_LOW_THRESHOLD = 30
+EDGE_HIGH_THRESHOLD = 100
+MIN_CONTOUR_PERIMETER = 10
+CONTOUR_EPSILON_FACTOR = 0.001
 
 
 def load_image(image_path: str) -> np.ndarray:
@@ -25,9 +35,14 @@ def create_edge_image(image: np.ndarray) -> np.ndarray:
 
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    # Stärker glätten, damit Fotorauschen nicht zu Zeichenlinien wird.
+    blurred = cv2.GaussianBlur(gray, EDGE_BLUR_KERNEL, 0)
 
-    edges = cv2.Canny(blurred, 50, 150)
+    edges = cv2.Canny(
+        blurred,
+        EDGE_LOW_THRESHOLD,
+        EDGE_HIGH_THRESHOLD,
+    )
 
     return edges
 
@@ -45,7 +60,7 @@ def find_contours(edge_image: np.ndarray):
     contours = [
         contour
         for contour in contours
-        if cv2.arcLength(contour, False) > 20
+        if cv2.arcLength(contour, False) > MIN_CONTOUR_PERIMETER
     ]
 
     # Größte Konturen zuerst
@@ -57,7 +72,10 @@ def find_contours(edge_image: np.ndarray):
     return contours
 
 
-def simplify_contours(contours, epsilon_factor=0.002):
+def simplify_contours(
+    contours,
+    epsilon_factor=CONTOUR_EPSILON_FACTOR,
+):
     """
     Vereinfacht die Konturen.
 
@@ -213,9 +231,62 @@ def process_image(
     return paths
 
 
-if __name__ == "__main__":
-    process_image(
-        "images/auto.jpg",
-        "images/auto_preview.png",
-        "images/auto_paths.json",
+def select_image_file() -> Path | None:
+    """Öffnet den Explorer und lässt den Benutzer ein Bild auswählen."""
+    root = tk.Tk()
+    root.withdraw()
+
+    try:
+        selected_file = filedialog.askopenfilename(
+            title="Bild zum Verarbeiten auswählen",
+            filetypes=[
+                (
+                    "Bilddateien",
+                    "*.jpg *.jpeg *.png *.bmp *.webp *.tif *.tiff",
+                ),
+                ("Alle Dateien", "*.*"),
+            ],
+        )
+    finally:
+        root.destroy()
+
+    return Path(selected_file) if selected_file else None
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Verarbeitet ein Bild in Zeichenpfade."
     )
+    parser.add_argument(
+        "image_path",
+        nargs="?",
+        help=(
+            "Pfad zum Eingabebild; ohne Angabe öffnet sich "
+            "ein Dateiauswahldialog"
+        ),
+    )
+
+    args = parser.parse_args()
+    image_path = (
+        Path(args.image_path)
+        if args.image_path
+        else select_image_file()
+    )
+
+    if image_path is None:
+        print("Keine Datei ausgewählt.")
+        return
+
+    process_image(
+        str(image_path),
+        str(image_path.with_name(
+            f"{image_path.stem}_preview.png"
+        )),
+        str(image_path.with_name(
+            f"{image_path.stem}_paths.json"
+        )),
+    )
+
+
+if __name__ == "__main__":
+    main()

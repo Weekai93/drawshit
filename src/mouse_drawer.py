@@ -16,20 +16,21 @@ from pynput import keyboard
 PATHS_FILE = Path("images/auto_paths.json")
 
 # Höher = schneller
-SPEED_PIXELS_PER_SECOND = 5000
+SPEED_PIXELS_PER_SECOND = 15000
 
 # Mindestdauer einer Mausbewegung
-MIN_MOVE_DURATION = 0.01
+MIN_MOVE_DURATION = 0.001
 
 # Pause zwischen einzelnen Zeichenpfaden
-PATH_PAUSE = 0.02
+PATH_PAUSE = 0.001
 
 # Anzahl der Pfade beim Cursor-Test
 TEST_PATHS = 5
 
 # PyAutoGUI
-pyautogui.PAUSE = 0.01
-pyautogui.MINIMUM_DURATION = 0.01
+pyautogui.PAUSE = 0.001
+pyautogui.MINIMUM_DURATION = 0.001
+pyautogui.MINIMUM_SLEEP = 0.001
 
 # Maus ganz oben links = zusätzlicher Not-Aus
 pyautogui.FAILSAFE = True
@@ -556,7 +557,7 @@ def draw_path(path, map_point):
         pyautogui.moveTo(
             first_point[0],
             first_point[1],
-            duration=max(MIN_MOVE_DURATION, 0.05)
+            duration=max(MIN_MOVE_DURATION, 0.001)
         )
 
     # Zeichnen
@@ -583,8 +584,7 @@ def draw_path(path, map_point):
 
             duration = distance / SPEED_PIXELS_PER_SECOND
 
-            # PyAutoGUI niemals eine extrem kleine/0 Dauer geben
-            duration = max(duration, MIN_MOVE_DURATION, 0.05)
+            duration = max(duration, MIN_MOVE_DURATION)
 
             pyautogui.moveTo(
                 point[0],
@@ -758,76 +758,36 @@ def main():
         )
 
         print()
-        print("=" * 50)
-        print("AUSWAHL")
-        print("=" * 50)
+        print("!!! WARNUNG !!!")
         print()
-        print("1 = Cursor-Test")
-        print("2 = Echtes Zeichnen")
-        print("3 = Beenden")
+        print(
+            "Jetzt wird die Maustaste tatsächlich "
+            "gedrückt und das Bild gezeichnet."
+        )
+        print()
+        print("Stelle sicher, dass:")
+        print(
+            "- das richtige Zeichenprogramm "
+            "geöffnet ist"
+        )
+        print(
+            "- die Zeichenfläche ausgewählt wurde"
+        )
+        print(
+            "- die ausgewählte Fläche korrekt ist"
+        )
+        print()
+        print("ESC = sofortiger Abbruch")
+        print(
+            "Maus oben links = "
+            "zusätzlicher Not-Aus"
+        )
         print()
 
-        choice = input(
-            "Auswahl: "
-        ).strip()
-
-        if choice == "1":
-            stop_event.clear()
-
-            cursor_test(
-                paths,
-                map_point
-            )
-
-        elif choice == "2":
-            print()
-            print("!!! WARNUNG !!!")
-            print()
-            print(
-                "Jetzt wird die Maustaste tatsächlich "
-                "gedrückt und das Bild gezeichnet."
-            )
-            print()
-            print("Stelle sicher, dass:")
-            print(
-                "- das richtige Zeichenprogramm "
-                "geöffnet ist"
-            )
-            print(
-                "- die Zeichenfläche ausgewählt wurde"
-            )
-            print(
-                "- die ausgewählte Fläche korrekt ist"
-            )
-            print()
-            print("ESC = sofortiger Abbruch")
-            print(
-                "Maus oben links = "
-                "zusätzlicher Not-Aus"
-            )
-            print()
-
-            confirmation = input(
-                "Zum Bestätigen exakt JA eingeben: "
-            ).strip()
-
-            if confirmation != "JA":
-                print()
-                print("Abgebrochen.")
-                return
-
-            draw_image(
-                paths,
-                map_point
-            )
-
-        elif choice == "3":
-            print()
-            print("Programm beendet.")
-
-        else:
-            print()
-            print("Ungültige Auswahl.")
+        draw_image(
+            paths,
+            map_point
+        )
 
     except FileNotFoundError as error:
         print()

@@ -33,10 +33,73 @@ def load_image(image_path: str) -> np.ndarray:
     return image
 
 
+def create_foreground_mask(image: np.ndarray) -> np.ndarray:
+    """Ermittelt automatisch einen groben Vordergrundbereich."""
+
+    original_height, original_width = image.shape[:2]
+
+    if original_width < 10 or original_height < 10:
+        raise ValueError("Das Bild ist für die Vordergrund-Erkennung zu klein.")
+
+    max_dimension = 600
+    scale = min(1.0, max_dimension / max(original_width, original_height))
+    if scale < 1.0:
+        image = cv2.resize(
+            image,
+            (
+                round(original_width * scale),
+                round(original_height * scale),
+            ),
+            interpolation=cv2.INTER_AREA,
+        )
+
+    height, width = image.shape[:2]
+    margin_x = max(1, width // 20)
+    margin_y = max(1, height // 20)
+    mask = np.full(
+        (height, width),
+        cv2.GC_PR_BGD,
+        dtype=np.uint8,
+    )
+    mask[margin_y:-margin_y, margin_x:-margin_x] = cv2.GC_PR_FGD
+    mask[:margin_y, :] = cv2.GC_BGD
+    mask[-margin_y:, :] = cv2.GC_BGD
+    mask[:, :margin_x] = cv2.GC_BGD
+    mask[:, -margin_x:] = cv2.GC_BGD
+
+    background_model = np.zeros((1, 65), dtype=np.float64)
+    foreground_model = np.zeros((1, 65), dtype=np.float64)
+    cv2.grabCut(
+        image,
+        mask,
+        None,
+        background_model,
+        foreground_model,
+        2,
+        cv2.GC_INIT_WITH_MASK,
+    )
+
+    foreground_mask = np.where(
+        (mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD),
+        255,
+        0,
+    ).astype(np.uint8)
+
+    if scale < 1.0:
+        foreground_mask = cv2.resize(
+            foreground_mask,
+            (original_width, original_height),
+            interpolation=cv2.INTER_NEAREST,
+        )
+
+    return foreground_mask
+
+
 def create_edge_image(
     image: np.ndarray,
     contrast_factor=DEFAULT_CONTRAST_FACTOR,
     threshold=None,
+    auto_foreground=False,
 ) -> np.ndarray:
     """Erkennt die Kanten des Bildes."""
 
@@ -63,6 +126,10 @@ def create_edge_image(
             cv2.THRESH_BINARY,
         )
 
+    foreground_mask = None
+    if auto_foreground:
+        foreground_mask = create_foreground_mask(image)
+
     # Leicht glätten, damit Fotorauschen nicht zu Zeichenlinien wird.
     blurred = cv2.GaussianBlur(gray, EDGE_BLUR_KERNEL, 0)
 
@@ -71,6 +138,15 @@ def create_edge_image(
         EDGE_LOW_THRESHOLD,
         EDGE_HIGH_THRESHOLD,
     )
+
+    if foreground_mask is not None:
+        edges[foreground_mask == 0] = 0
+        foreground_edges = cv2.Canny(
+            foreground_mask,
+            EDGE_LOW_THRESHOLD,
+            EDGE_HIGH_THRESHOLD,
+        )
+        edges = cv2.bitwise_or(edges, foreground_edges)
 
     return edges
 
@@ -192,6 +268,7 @@ def process_image(
     paths_path: str,
     contrast_factor=DEFAULT_CONTRAST_FACTOR,
     threshold=None,
+    auto_foreground=False,
 ):
     """Komplette Bildverarbeitung."""
 
@@ -210,6 +287,7 @@ def process_image(
         image,
         contrast_factor=contrast_factor,
         threshold=threshold,
+        auto_foreground=auto_foreground,
     )
 
     print("Konturen werden gesucht...")
@@ -367,6 +445,11 @@ def main():
             "Optionaler Schwarz-Weiß-Schwellwert zwischen 0 und 255"
         ),
     )
+    parser.add_argument(
+        "--auto-foreground",
+        action="store_true",
+        help="Reduziert automatisch erkannte Hintergrundbereiche",
+    )
 
     args = parser.parse_args()
     if args.clipboard and args.image_path:
@@ -392,6 +475,7 @@ def main():
         )),
         contrast_factor=args.contrast,
         threshold=args.threshold,
+        auto_foreground=args.auto_foreground,
     )
 
 

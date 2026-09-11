@@ -56,6 +56,20 @@ Optional kann das Bild zusätzlich mit einem Schwarz-Weiß-Schwellwert zwischen
 python src/image_processor.py images/mein_bild.png --threshold 160
 ```
 
+Bei Fotos mit störendem Hintergrund kann zusätzlich ein automatischer
+Vordergrundfilter aktiviert werden. Er benötigt keine manuelle Auswahl:
+
+```powershell
+python src/image_processor.py images/mein_bild.png --auto-foreground
+```
+
+Für schwierige Fotos kann der Filter mit Kontrast und Schwellwert kombiniert
+werden:
+
+```powershell
+python src/image_processor.py images/mein_bild.png --contrast 1.5 --threshold 120 --auto-foreground
+```
+
 Dabei werden neben dem Eingabebild automatisch `images/mein_bild_preview.png`
 und `images/mein_bild_paths.json` erzeugt.
 

@@ -42,6 +42,20 @@ Ein Bild kann auch weiterhin explizit über einen Pfad verarbeitet werden:
 python src/image_processor.py images/mein_bild.png
 ```
 
+Für kontrastärmere Bilder kann der Kontrast vor der Kanten-Erkennung erhöht
+werden:
+
+```powershell
+python src/image_processor.py images/mein_bild.png --contrast 1.5
+```
+
+Optional kann das Bild zusätzlich mit einem Schwarz-Weiß-Schwellwert zwischen
+`0` und `255` vorbereitet werden:
+
+```powershell
+python src/image_processor.py images/mein_bild.png --threshold 160
+```
+
 Dabei werden neben dem Eingabebild automatisch `images/mein_bild_preview.png`
 und `images/mein_bild_paths.json` erzeugt.
 

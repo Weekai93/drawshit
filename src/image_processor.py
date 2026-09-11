@@ -15,6 +15,7 @@ EDGE_HIGH_THRESHOLD = 100
 MIN_CONTOUR_PERIMETER = 10
 CONTOUR_EPSILON_FACTOR = 0.0005
 CLIPBOARD_IMAGE_PATH = Path("images/clipboard.png")
+DEFAULT_CONTRAST_FACTOR = 1.0
 
 
 def load_image(image_path: str) -> np.ndarray:
@@ -32,10 +33,35 @@ def load_image(image_path: str) -> np.ndarray:
     return image
 
 
-def create_edge_image(image: np.ndarray) -> np.ndarray:
+def create_edge_image(
+    image: np.ndarray,
+    contrast_factor=DEFAULT_CONTRAST_FACTOR,
+    threshold=None,
+) -> np.ndarray:
     """Erkennt die Kanten des Bildes."""
 
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    if contrast_factor <= 0:
+        raise ValueError("Der Kontrastfaktor muss größer als 0 sein.")
+
+    if contrast_factor != DEFAULT_CONTRAST_FACTOR:
+        gray = cv2.convertScaleAbs(
+            gray,
+            alpha=contrast_factor,
+            beta=128 * (1 - contrast_factor),
+        )
+
+    if threshold is not None and not 0 <= threshold <= 255:
+        raise ValueError("Der Schwellwert muss zwischen 0 und 255 liegen.")
+
+    if threshold is not None:
+        _, gray = cv2.threshold(
+            gray,
+            threshold,
+            255,
+            cv2.THRESH_BINARY,
+        )
 
     # Leicht glätten, damit Fotorauschen nicht zu Zeichenlinien wird.
     blurred = cv2.GaussianBlur(gray, EDGE_BLUR_KERNEL, 0)
@@ -164,6 +190,8 @@ def process_image(
     input_path: str,
     preview_path: str,
     paths_path: str,
+    contrast_factor=DEFAULT_CONTRAST_FACTOR,
+    threshold=None,
 ):
     """Komplette Bildverarbeitung."""
 
@@ -178,7 +206,11 @@ def process_image(
 
     print("Kanten werden erkannt...")
 
-    edges = create_edge_image(image)
+    edges = create_edge_image(
+        image,
+        contrast_factor=contrast_factor,
+        threshold=threshold,
+    )
 
     print("Konturen werden gesucht...")
 
@@ -319,6 +351,22 @@ def main():
         action="store_true",
         help="Verwendet das Bild aus der Zwischenablage",
     )
+    parser.add_argument(
+        "--contrast",
+        type=float,
+        default=DEFAULT_CONTRAST_FACTOR,
+        help=(
+            "Kontrastfaktor für die Kanten-Erkennung "
+            "(Standard: 1.0)"
+        ),
+    )
+    parser.add_argument(
+        "--threshold",
+        type=int,
+        help=(
+            "Optionaler Schwarz-Weiß-Schwellwert zwischen 0 und 255"
+        ),
+    )
 
     args = parser.parse_args()
     if args.clipboard and args.image_path:
@@ -342,6 +390,8 @@ def main():
         str(image_path.with_name(
             f"{image_path.stem}_paths.json"
         )),
+        contrast_factor=args.contrast,
+        threshold=args.threshold,
     )
 
 

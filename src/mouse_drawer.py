@@ -22,6 +22,9 @@ SPEED_PIXELS_PER_SECOND = 15000
 # Mindestdauer einer Mausbewegung
 MIN_MOVE_DURATION = 0.001
 
+# Größere Sprünge gehören zu getrennten Konturstücken.
+MAX_STROKE_JUMP = 100
+
 # Pause zwischen einzelnen Zeichenpfaden
 PATH_PAUSE = 0.001
 
@@ -606,6 +609,17 @@ def draw_path(path, map_point):
             # WICHTIG:
             # Keine Bewegung ausführen, wenn wir bereits dort sind.
             if distance <= 0:
+                continue
+
+            # Getrennte Konturstücke niemals mit einer Linie verbinden.
+            if distance > MAX_STROKE_JUMP:
+                pyautogui.mouseUp()
+                pyautogui.moveTo(
+                    point[0],
+                    point[1],
+                    duration=max(MIN_MOVE_DURATION, 0.001),
+                )
+                pyautogui.mouseDown()
                 continue
 
             duration = distance / SPEED_PIXELS_PER_SECOND

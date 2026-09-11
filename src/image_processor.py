@@ -35,7 +35,7 @@ def create_edge_image(image: np.ndarray) -> np.ndarray:
 
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # Stärker glätten, damit Fotorauschen nicht zu Zeichenlinien wird.
+    # Leicht glätten, damit Fotorauschen nicht zu Zeichenlinien wird.
     blurred = cv2.GaussianBlur(gray, EDGE_BLUR_KERNEL, 0)
 
     edges = cv2.Canny(

@@ -12,7 +12,7 @@ EDGE_BLUR_KERNEL = (3, 3)
 EDGE_LOW_THRESHOLD = 30
 EDGE_HIGH_THRESHOLD = 100
 MIN_CONTOUR_PERIMETER = 10
-CONTOUR_EPSILON_FACTOR = 0.001
+CONTOUR_EPSILON_FACTOR = 0.0005
 
 
 def load_image(image_path: str) -> np.ndarray:
@@ -53,7 +53,7 @@ def find_contours(edge_image: np.ndarray):
     contours, _ = cv2.findContours(
         edge_image,
         cv2.RETR_LIST,
-        cv2.CHAIN_APPROX_SIMPLE,
+        cv2.CHAIN_APPROX_NONE,
     )
 
     # Kleine Konturen entfernen
@@ -274,8 +274,8 @@ def main():
     )
 
     if image_path is None:
-        print("Keine Datei ausgewählt.")
-        return
+        print("Dateiauswahl abgebrochen. Programm wird beendet.")
+        raise SystemExit(0)
 
     process_image(
         str(image_path),

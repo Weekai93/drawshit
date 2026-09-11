@@ -786,8 +786,11 @@ def main():
             input_path = select_image_file()
 
             if input_path is None:
-                print("Keine Datei ausgewählt.")
-                return
+                print(
+                    "Dateiauswahl abgebrochen. "
+                    "Programm wird beendet."
+                )
+                raise SystemExit(0)
 
         if input_path.suffix.lower() == ".json":
             paths_file = input_path

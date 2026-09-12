@@ -4,6 +4,7 @@ import math
 import threading
 import time
 import traceback
+import tkinter as tk
 from pathlib import Path
 
 import pyautogui
@@ -41,6 +42,113 @@ pyautogui.FAILSAFE = True
 
 # Globales Stop-Signal
 stop_event = threading.Event()
+
+# Abstand zwischen den kleinen Aktivitätsbewegungen
+ACTIVITY_MOVE_INTERVAL = 30
+
+
+class ActivityPreventer:
+    """Hält den Rechner während der Auswahl und Verarbeitung aktiv."""
+
+    def __init__(self, interval=ACTIVITY_MOVE_INTERVAL):
+        self.interval = interval
+        self.stop_event = threading.Event()
+        self.thread = None
+
+    def start(self):
+        if self.thread is not None and self.thread.is_alive():
+            return
+
+        self.stop_event.clear()
+        self.thread = threading.Thread(
+            target=self._run,
+            name="activity-preventer",
+            daemon=True,
+        )
+        self.thread.start()
+        print("Aktivitätsfunktion gestartet.")
+
+    def stop(self):
+        if self.thread is None:
+            return
+
+        self.stop_event.set()
+        self.thread.join(timeout=1)
+        self.thread = None
+        print("Aktivitätsfunktion beendet.")
+
+    def _run(self):
+        while not self.stop_event.wait(self.interval):
+            try:
+                position = pyautogui.position()
+                screen_width, _ = pyautogui.size()
+                direction = 1 if position.x < screen_width - 1 else -1
+
+                pyautogui.moveTo(
+                    position.x + direction,
+                    position.y,
+                    duration=0.05,
+                )
+                pyautogui.moveTo(
+                    position.x,
+                    position.y,
+                    duration=0.05,
+                )
+            except pyautogui.FailSafeException:
+                return
+            except Exception:
+                continue
+
+
+def select_start_mode():
+    """Lässt die Bildquelle oder den reinen Mausbeweger auswählen."""
+    root = tk.Tk()
+    root.title("Programmstart")
+    root.resizable(False, False)
+
+    choice = {"value": None}
+
+    tk.Label(
+        root,
+        text="Wie soll das Programm gestartet werden?",
+        padx=24,
+        pady=16,
+    ).pack()
+
+    button_frame = tk.Frame(root)
+    button_frame.pack(padx=16, pady=(0, 16))
+
+    def choose(value):
+        choice["value"] = value
+        root.destroy()
+
+    try:
+        tk.Button(
+            button_frame,
+            text="Zwischenablage",
+            command=lambda: choose("clipboard"),
+            width=18,
+        ).pack(side=tk.LEFT, padx=4)
+        tk.Button(
+            button_frame,
+            text="Datei auswählen",
+            command=lambda: choose("file"),
+            width=18,
+        ).pack(side=tk.LEFT, padx=4)
+        tk.Button(
+            button_frame,
+            text="Nur Mausbeweger",
+            command=lambda: choose("activity"),
+            width=18,
+        ).pack(side=tk.LEFT, padx=4)
+
+        root.mainloop()
+        return choice["value"]
+    finally:
+        try:
+            root.destroy()
+        except tk.TclError:
+            pass
 
 
 # ============================================================
@@ -785,6 +893,8 @@ def main():
     print("=" * 50)
     print()
 
+    activity_preventer = None
+
     try:
         if args.clipboard:
             from image_processor import save_clipboard_image
@@ -793,9 +903,34 @@ def main():
         elif args.input_file:
             input_path = Path(args.input_file)
         else:
-            from image_processor import select_image_source
+            start_mode = select_start_mode()
 
-            input_path = select_image_source()
+            if start_mode == "activity":
+                activity_preventer = ActivityPreventer()
+                activity_preventer.start()
+                print("Nur der Mausbeweger läuft.")
+                print("Mit STRG+C beenden.")
+
+                try:
+                    while True:
+                        time.sleep(1)
+                except KeyboardInterrupt:
+                    print()
+                    print("Mausbeweger beendet.")
+                return
+
+            if start_mode == "clipboard":
+                from image_processor import save_clipboard_image
+
+                activity_preventer = ActivityPreventer()
+                activity_preventer.start()
+                input_path = save_clipboard_image()
+            else:
+                from image_processor import select_image_file
+
+                activity_preventer = ActivityPreventer()
+                activity_preventer.start()
+                input_path = select_image_file()
 
             if input_path is None:
                 print(
@@ -840,6 +975,10 @@ def main():
             f"{point_count} "
             "Zeichenpunkte geladen."
         )
+
+        if activity_preventer is not None:
+            activity_preventer.stop()
+            activity_preventer = None
 
         drawing_area = select_drawing_area()
 
@@ -895,6 +1034,10 @@ def main():
         print()
         print("Details:")
         traceback.print_exc()
+
+    finally:
+        if activity_preventer is not None:
+            activity_preventer.stop()
 
     print()
 

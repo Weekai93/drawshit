@@ -2,6 +2,8 @@ from pathlib import Path
 
 import cv2
 
+from mouse_drawer import main as mouse_drawer_main
+
 
 def load_image(image_path: str):
     """Lädt ein Bild mit OpenCV."""
@@ -19,10 +21,7 @@ def load_image(image_path: str):
 
 
 def main():
-    print("Mouse Drawing App")
-    print("-----------------")
-    print("Projekt erfolgreich gestartet.")
-    print("")
+    mouse_drawer_main()
 
 
 if __name__ == "__main__":

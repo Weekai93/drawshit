@@ -22,6 +22,10 @@ Windows-Zwischenablage verarbeitet und gezeichnet werden:
 python src/mouse_drawer.py --clipboard
 ```
 
+Beim Start kann außerdem ausgewählt werden, ob nur der Mausbeweger laufen
+soll. Dieser bewegt die Maus regelmäßig minimal, damit der Rechner aktiv
+bleibt. Der reine Mausbeweger wird mit `STRG+C` beendet.
+
 Mit der gebauten Windows-EXE:
 
 ```powershell

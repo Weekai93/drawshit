@@ -1,4 +1,5 @@
 import argparse
+import ctypes
 import json
 import math
 import threading
@@ -45,10 +46,11 @@ stop_event = threading.Event()
 
 # Abstand zwischen den kleinen Aktivitätsbewegungen
 ACTIVITY_MOVE_INTERVAL = 30
+ACTIVITY_MOVE_PIXELS = 2
 
 
 class ActivityPreventer:
-    """Hält den Rechner während der Auswahl und Verarbeitung aktiv."""
+    """Hält den Rechner und die Benutzeraktivität währenddessen aktiv."""
 
     def __init__(self, interval=ACTIVITY_MOVE_INTERVAL):
         self.interval = interval
@@ -60,6 +62,7 @@ class ActivityPreventer:
             return
 
         self.stop_event.clear()
+        self._set_system_awake(True)
         self.thread = threading.Thread(
             target=self._run,
             name="activity-preventer",
@@ -75,25 +78,45 @@ class ActivityPreventer:
         self.stop_event.set()
         self.thread.join(timeout=1)
         self.thread = None
+        self._set_system_awake(False)
         print("Aktivitätsfunktion beendet.")
+
+    @staticmethod
+    def _set_system_awake(active):
+        if not hasattr(ctypes, "windll"):
+            return
+
+        state = 0x80000000
+        if active:
+            state |= 0x00000001 | 0x00000002
+
+        result = ctypes.windll.kernel32.SetThreadExecutionState(state)
+        if result == 0:
+            raise ctypes.WinError()
 
     def _run(self):
         while not self.stop_event.wait(self.interval):
             try:
                 position = pyautogui.position()
                 screen_width, _ = pyautogui.size()
-                direction = 1 if position.x < screen_width - 1 else -1
+                direction = 1 if position.x < screen_width - 2 else -1
+                pixels = direction * ACTIVITY_MOVE_PIXELS
 
-                pyautogui.moveTo(
-                    position.x + direction,
-                    position.y,
-                    duration=0.05,
-                )
-                pyautogui.moveTo(
-                    position.x,
-                    position.y,
-                    duration=0.05,
-                )
+                if hasattr(ctypes, "windll"):
+                    mouse_event = ctypes.windll.user32.mouse_event
+                    mouse_event(0x0001, pixels, 0, 0, 0)
+                    mouse_event(0x0001, -pixels, 0, 0, 0)
+                else:
+                    pyautogui.moveTo(
+                        position.x + pixels,
+                        position.y,
+                        duration=0.05,
+                    )
+                    pyautogui.moveTo(
+                        position.x,
+                        position.y,
+                        duration=0.05,
+                    )
             except pyautogui.FailSafeException:
                 return
             except Exception:
